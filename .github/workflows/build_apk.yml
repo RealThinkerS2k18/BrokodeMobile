@@ -22,11 +22,7 @@ jobs:
           pip install flet
           pip install -r requirements.txt
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable' # Đổi thành stable để luôn lấy bản mới nhất tương thích
-          flutter-version: '3.22.0' # Nâng cấp version Flutter
+      # --- ĐÃ XÓA BƯỚC SETUP FLUTTER (Flet sẽ tự lo việc này) ---
 
       - name: Setup Java
         uses: actions/setup-java@v3
@@ -35,8 +31,9 @@ jobs:
           java-version: '17'
 
       - name: Build APK
+        # Thêm "yes |" vào trước câu lệnh để tự động chọn Yes
         run: |
-          flet build apk --verbose
+          yes | flet build apk --verbose
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
