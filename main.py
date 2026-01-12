@@ -2,7 +2,7 @@ import flet as ft
 import unicodedata
 
 # ==========================================
-# PHẦN LOGIC (GIỮ NGUYÊN TỪ BẢN CŨ)
+# PHẦN LOGIC (GIỮ NGUYÊN)
 # ==========================================
 CHAR_TO_CODE = {
     'a': '78', 'b': '75', 'c': '72', 'd': '69', 'e': '66', 'f': '63', 'g': '60',
@@ -110,65 +110,56 @@ def decode_brokode(text):
     return "".join(decoded)
 
 # ==========================================
-# PHẦN GIAO DIỆN FLET (MOBILE UI)
+# GIAO DIỆN MOBILE (ĐÃ FIX LỖI ĐEN MÀN HÌNH)
 # ==========================================
 def main(page: ft.Page):
-    page.title = "Brokode Mobile"
-    page.vertical_alignment = ft.MainAxisAlignment.START
-    # Flet hỗ trợ responsive, nhưng ta set chiều rộng hẹp để test giao diện điện thoại
-    page.window_width = 390
-    page.window_height = 844
+    # Cấu hình cơ bản cho mobile
+    page.title = "Brokode"
     page.scroll = "adaptive"
+    page.theme_mode = ft.ThemeMode.LIGHT # Bắt buộc chế độ sáng để tránh lỗi hiển thị
+    page.padding = 20
 
-    # Style chữ Times New Roman
-    my_font = "Times New Roman"
+    lbl_title = ft.Text("Brokode Converter", size=24, weight="bold")
     
-    lbl_title = ft.Text("Brokode Converter", size=24, weight="bold", font_family=my_font)
-    
-    # Ô hiển thị kết quả (Output)
     txt_result = ft.TextField(
         label="Kết quả",
         multiline=True,
         read_only=True,
         min_lines=5,
-        max_lines=10,
         text_size=16,
-        border_color="blue",
-        font_family=my_font
+        border_color="blue"
     )
 
-    # Hàm xử lý khi gõ phím
     def on_input_change(e):
-        content = e.control.value.strip()
-        if not content:
-            txt_result.value = ""
-        elif content.startswith("C(") and content.endswith(")"):
-            txt_result.value = decode_brokode(content)
-        else:
-            txt_result.value = encode_text(content)
-        page.update()
+        try:
+            content = e.control.value.strip()
+            if not content:
+                txt_result.value = ""
+            elif content.startswith("C(") and content.endswith(")"):
+                txt_result.value = decode_brokode(content)
+            else:
+                txt_result.value = encode_text(content)
+            page.update()
+        except Exception as ex:
+            # Nếu có lỗi thì hiện ra để biết đường sửa
+            txt_result.value = f"Lỗi: {str(ex)}"
+            page.update()
 
-    # Ô nhập liệu (Input)
     txt_input = ft.TextField(
-        label="Nhập Tiếng Việt hoặc Mã Brokode",
-        hint_text="Gõ vào đây...",
+        label="Nhập nội dung",
+        hint_text="Tiếng Việt hoặc mã Brokode...",
         multiline=True,
         min_lines=3,
-        max_lines=5,
         on_change=on_input_change,
-        text_size=16,
-        autofocus=True,
-        font_family=my_font
+        text_size=16
     )
 
-    # Nút copy (Tính năng tiện ích cho mobile)
     def copy_result(e):
         page.set_clipboard(txt_result.value)
-        page.show_snack_bar(ft.SnackBar(ft.Text("Đã copy kết quả!")))
+        page.show_snack_bar(ft.SnackBar(ft.Text("Đã copy!")))
 
     btn_copy = ft.ElevatedButton("Copy Kết quả", on_click=copy_result)
 
-    # Thêm các thành phần vào màn hình
     page.add(
         ft.Column(
             [
@@ -179,8 +170,9 @@ def main(page: ft.Page):
                 btn_copy
             ],
             spacing=20,
-            alignment=ft.MainAxisAlignment.CENTER
+            alignment=ft.MainAxisAlignment.START
         )
     )
 
+# Dòng quan trọng nhất: Chỉ giữ target=main, không thêm gì khác
 ft.app(target=main)
