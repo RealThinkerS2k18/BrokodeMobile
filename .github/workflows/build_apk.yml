@@ -25,8 +25,8 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
-          channel: 'stable'
+          channel: 'stable' # Đổi thành stable để luôn lấy bản mới nhất tương thích
+          flutter-version: '3.22.0' # Nâng cấp version Flutter
 
       - name: Setup Java
         uses: actions/setup-java@v3
@@ -37,7 +37,7 @@ jobs:
       - name: Build APK
         run: |
           flet build apk --verbose
-
+      
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
