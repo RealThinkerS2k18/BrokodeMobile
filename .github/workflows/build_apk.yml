@@ -22,7 +22,12 @@ jobs:
           pip install flet
           pip install -r requirements.txt
 
-      # --- ĐÃ XÓA BƯỚC SETUP FLUTTER (Flet sẽ tự lo việc này) ---
+      # BƯỚC QUAN TRỌNG: Cài sẵn Flutter để Flet không phải hỏi "y/n" nữa
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.22.0'
 
       - name: Setup Java
         uses: actions/setup-java@v3
@@ -31,12 +36,13 @@ jobs:
           java-version: '17'
 
       - name: Build APK
-        # Thêm "yes |" vào trước câu lệnh để tự động chọn Yes
+        # Thêm "yes |" để tự động chọn Yes nếu có bất kỳ câu hỏi nào
         run: |
           yes | flet build apk --verbose
-      
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: brokode-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          # Sửa đường dẫn thành tìm kiếm mọi file .apk (tránh lỗi sai đường dẫn)
+          path: build/**/*.apk
