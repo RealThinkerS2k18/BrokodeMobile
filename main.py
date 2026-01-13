@@ -2,7 +2,7 @@ import flet as ft
 import unicodedata
 
 # ==========================================
-# PHẦN LOGIC (ĐÃ FIX LỖI HOÀN TOÀN)
+# PHẦN LOGIC (GIỮ NGUYÊN VÌ ĐÃ CHUẨN)
 # ==========================================
 CHAR_TO_CODE = {
     'a': '78', 'b': '75', 'c': '72', 'd': '69', 'e': '66', 'f': '63', 'g': '60',
@@ -37,24 +37,18 @@ def get_char_modifiers(char):
     char_nfd = unicodedata.normalize('NFD', char)
     base_char = char_nfd[0]
     modifiers = []
-    
     temp_chars_without_tone = [base_char]
-
     for c in char_nfd[1:]:
         if c in TONE_MARKS:
             modifiers.append(TONE_MARKS[c])
         else:
             temp_chars_without_tone.append(c)
-            
     char_no_tone = unicodedata.normalize('NFC', "".join(temp_chars_without_tone))
-    
     if char == 'đ' or base_char == 'đ' or char_no_tone == 'đ':
         return 'd', ['kw'] + modifiers
-
     if char_no_tone in REVERSE_VARIANTS:
         base_origin, mod_type = REVERSE_VARIANTS[char_no_tone]
         return base_origin, [mod_type] + modifiers
-    
     return base_char, modifiers
 
 def encode_text(text):
@@ -65,9 +59,7 @@ def encode_text(text):
         if lower_char.isdigit():
             result.append(DIGIT_TO_CODE.get(lower_char, lower_char))
             continue
-        
         base, mods = get_char_modifiers(lower_char)
-        
         if base in CHAR_TO_CODE:
             code = CHAR_TO_CODE[base]
             unique_mods = list(dict.fromkeys(mods))
@@ -81,7 +73,6 @@ def encode_text(text):
         else:
             if char == '\n': result.append('\n')
             elif char.strip(): result.append("?") 
-            
     final_output = []
     current_line = []
     for item in result:
@@ -94,32 +85,26 @@ def encode_text(text):
             current_line.append(item)
     if current_line:
         final_output.append("C(" + ".".join(current_line) + ")")
-        
     return "".join(final_output)
 
 def decode_brokode(text):
     lines = text.split('\n')
     decoded_lines = []
-    
     for line in lines:
         line = line.strip()
         if not (line.startswith("C(") and line.endswith(")")):
             decoded_lines.append(line)
             continue
-            
         content = line[2:-1]
         if not content: 
             decoded_lines.append("")
             continue
-        
         parts = content.split('.')
         decoded_chars = []
-        
         for part in parts:
             if part in CODE_TO_DIGIT:
                 decoded_chars.append(CODE_TO_DIGIT[part])
                 continue
-                
             code_part = ""
             mod_part = ""
             for i, char in enumerate(part):
@@ -128,84 +113,67 @@ def decode_brokode(text):
                     mod_part = part[i:]
                     break
             if not code_part: code_part = part
-            
             base_char = CODE_TO_CHAR.get(code_part, '?')
-            
             if mod_part:
                 mods = mod_part.split('/')
-                # 1. Biến thể kw/km
                 for mod in mods:
                     if mod in VARIANT_RULES:
                         base_char = VARIANT_RULES[mod].get(base_char, base_char)
-                
-                # 2. Dấu thanh (ĐÃ FIX: Check trực tiếp key)
                 tone_char = ""
                 for mod in mods:
                     if mod in REVERSE_TONES:
                         tone_char = REVERSE_TONES[mod]
                         break
-                
                 if tone_char:
                     base_char = unicodedata.normalize('NFC', base_char + tone_char)
-            
             decoded_chars.append(base_char)
         decoded_lines.append("".join(decoded_chars))
-        
     return "\n".join(decoded_lines)
 
 # ==========================================
-# GIAO DIỆN MOBILE ULTIMATE (DARK MODE)
+# GIAO DIỆN DARK MODE (SAFE VERSION)
 # ==========================================
 def main(page: ft.Page):
-    # Cấu hình mặc định: DARK MODE + NỀN ĐEN
-    page.title = "Brokode Ultimate"
-    page.scroll = "hidden" # Ẩn thanh cuộn để đẹp hơn
-    page.theme_mode = ft.ThemeMode.DARK
-    page.bgcolor = "black" # Màu đen hoàn toàn (AMOLED)
-    page.padding = 0 # Full màn hình
+    # Cấu hình an toàn: Không force màu đen nền, để Flet tự xử lý Dark Mode
+    page.title = "Brokode"
+    page.theme_mode = ft.ThemeMode.DARK # Chế độ tối
+    page.scroll = "adaptive" # Cho phép cuộn nếu màn hình nhỏ
+    page.padding = 20
 
-    # Hàm đổi giao diện Sáng/Tối
+    # Hàm đổi theme
     def toggle_theme(e):
         if page.theme_mode == ft.ThemeMode.DARK:
             page.theme_mode = ft.ThemeMode.LIGHT
-            page.bgcolor = "white"
-            btn_theme.icon = ft.icons.DARK_MODE
-            btn_theme.tooltip = "Chuyển sang Tối"
+            btn_theme.icon = ft.icons.DARK_MODE # Icon mặt trăng (chuẩn)
         else:
             page.theme_mode = ft.ThemeMode.DARK
-            page.bgcolor = "black"
-            btn_theme.icon = ft.icons.LIGHT_MODE
-            btn_theme.tooltip = "Chuyển sang Sáng"
+            btn_theme.icon = ft.icons.WB_SUNNY # Icon mặt trời (chuẩn)
         page.update()
 
-    # Thanh tiêu đề (AppBar)
     btn_theme = ft.IconButton(
-        icon=ft.icons.LIGHT_MODE, 
-        on_click=toggle_theme, 
-        tooltip="Chuyển giao diện"
+        icon=ft.icons.WB_SUNNY, 
+        on_click=toggle_theme,
+        tooltip="Đổi giao diện"
     )
-    
+
     page.appbar = ft.AppBar(
-        title=ft.Text("Brokode V3", weight="bold", size=22),
+        title=ft.Text("Brokode V3.1", weight="bold"),
         center_title=True,
-        bgcolor=ft.colors.BLUE_GREY_900,
+        bgcolor=ft.colors.SURFACE_VARIANT,
         actions=[btn_theme]
     )
 
-    # Ô hiển thị kết quả
+    # Ô kết quả (Bỏ hiệu ứng mờ phức tạp để tránh lỗi render)
     txt_result = ft.TextField(
-        label="Kết quả dịch",
+        label="Kết quả",
         multiline=True,
         read_only=True,
-        min_lines=6,
+        min_lines=5,
         text_size=18,
-        border_radius=15,
-        filled=True, # Có màu nền
-        bgcolor=ft.colors.with_opacity(0.1, ft.colors.WHITE), # Nền mờ nhẹ
-        border_color=ft.colors.TRANSPARENT,
+        border_radius=10,
+        filled=True
     )
 
-    # Xử lý sự kiện nhập liệu
     def on_input_change(e):
         try:
             content = e.control.value.strip()
@@ -220,52 +188,42 @@ def main(page: ft.Page):
             txt_result.value = f"Lỗi: {str(ex)}"
             page.update()
 
-    # Ô nhập liệu
     txt_input = ft.TextField(
         label="Nhập văn bản",
-        hint_text="Gõ Tiếng Việt hoặc dán mã Brokode...",
+        hint_text="Nhập tiếng Việt hoặc mã...",
         multiline=True,
-        min_lines=4,
-        max_lines=6,
+        min_lines=3,
         on_change=on_input_change,
         text_size=16,
-        border_radius=15,
-        border_color=ft.colors.BLUE_400,
-        focused_border_color=ft.colors.BLUE_200,
+        border_radius=10,
+        autofocus=True
     )
 
-    # Nút Copy
     def copy_result(e):
         page.set_clipboard(txt_result.value)
-        page.show_snack_bar(ft.SnackBar(ft.Text("Đã copy vào bộ nhớ tạm!"), bgcolor="green"))
+        page.show_snack_bar(ft.SnackBar(ft.Text("Đã copy!")))
 
     btn_copy = ft.ElevatedButton(
-        "Sao chép kết quả", 
+        "Sao chép", 
         icon=ft.icons.COPY, 
         on_click=copy_result,
-        height=50,
-        style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=12),
-            bgcolor=ft.colors.BLUE_700,
-            color="white"
-        )
+        height=45
     )
 
-    # Bố cục chính (Container bọc ngoài để tạo khoảng cách đẹp)
-    content_container = ft.Container(
-        padding=20,
-        content=ft.Column(
-            [
-                txt_input,
-                ft.Divider(height=20, color="transparent"),
-                txt_result,
-                ft.Divider(height=20, color="transparent"),
-                ft.Container(content=btn_copy, alignment=ft.alignment.center)
-            ],
-            scroll="adaptive"
+    # Dùng SafeArea để tránh bị tai thỏ che mất nội dung
+    page.add(
+        ft.SafeArea(
+            ft.Column(
+                [
+                    txt_input,
+                    ft.Divider(),
+                    txt_result,
+                    ft.Container(height=10), # Khoảng cách
+                    btn_copy
+                ],
+                spacing=10
+            )
         )
     )
-
-    page.add(content_container)
 
 ft.app(target=main)
