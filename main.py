@@ -2,7 +2,7 @@ import flet as ft
 import unicodedata
 
 # ==========================================
-# PHẦN LOGIC (ĐÃ SỬA LỖI MẤT DẤU MŨ/RÂU)
+# PHẦN LOGIC (ĐÃ FIX LỖI HOÀN TOÀN)
 # ==========================================
 CHAR_TO_CODE = {
     'a': '78', 'b': '75', 'c': '72', 'd': '69', 'e': '66', 'f': '63', 'g': '60',
@@ -34,34 +34,25 @@ TONE_MARKS = {
 REVERSE_TONES = {v: k for k, v in TONE_MARKS.items()}
 
 def get_char_modifiers(char):
-    # Bước 1: Tách ký tự thành các thành phần nhỏ (NFD)
     char_nfd = unicodedata.normalize('NFD', char)
-    base_char = char_nfd[0] # Lấy chữ cái gốc (ví dụ 'ừ' -> gốc là 'u')
+    base_char = char_nfd[0]
     modifiers = []
     
-    # Danh sách tạm để tái tạo chữ cái không có dấu thanh (để check kw/km)
     temp_chars_without_tone = [base_char]
 
-    # Bước 2: Duyệt qua các dấu đi kèm
     for c in char_nfd[1:]:
         if c in TONE_MARKS:
-            # Nếu là dấu thanh (sắc huyền...) thì đưa vào danh sách mod
             modifiers.append(TONE_MARKS[c])
         else:
-            # Nếu không phải dấu thanh (ví dụ dấu mũ, dấu râu), giữ lại để check kw/km
             temp_chars_without_tone.append(c)
-    
-    # Bước 3: Tái tạo chữ cái chỉ có mũ/râu (ví dụ 'ừ' -> tái tạo thành 'ư')
+            
     char_no_tone = unicodedata.normalize('NFC', "".join(temp_chars_without_tone))
     
-    # Xử lý riêng chữ đ (vì đ đôi khi không tách được bằng NFD trên một số hệ thống)
     if char == 'đ' or base_char == 'đ' or char_no_tone == 'đ':
         return 'd', ['kw'] + modifiers
 
-    # Bước 4: Check xem chữ tái tạo có phải là biến thể (ă, â, ê, ô, ơ, ư) không
     if char_no_tone in REVERSE_VARIANTS:
         base_origin, mod_type = REVERSE_VARIANTS[char_no_tone]
-        # Thêm mod loại kw/km vào đầu danh sách
         return base_origin, [mod_type] + modifiers
     
     return base_char, modifiers
@@ -75,14 +66,12 @@ def encode_text(text):
             result.append(DIGIT_TO_CODE.get(lower_char, lower_char))
             continue
         
-        # Gọi hàm xử lý mới đã fix lỗi
         base, mods = get_char_modifiers(lower_char)
         
         if base in CHAR_TO_CODE:
             code = CHAR_TO_CODE[base]
             unique_mods = list(dict.fromkeys(mods))
             if unique_mods:
-                # Format: code + mod1 + / + mod2...
                 full_code = code + unique_mods[0]
                 if len(unique_mods) > 1:
                     full_code += "".join("/" + m for m in unique_mods[1:])
@@ -90,77 +79,133 @@ def encode_text(text):
             else:
                 result.append(code)
         else:
-            # Giữ nguyên ký tự lạ (xuống dòng, dấu câu...)
-            if char == '\n': 
-                result.append('\n')
-            elif char.strip(): 
-                result.append("?") 
-    
-    # Xử lý ghép chuỗi output đẹp hơn
-    final_str = "C(" + ".".join([r for r in result if r != '\n']) + ")"
-    # Nếu có xuống dòng thì xử lý hiển thị (tạm thời để simple)
-    return final_str
+            if char == '\n': result.append('\n')
+            elif char.strip(): result.append("?") 
+            
+    final_output = []
+    current_line = []
+    for item in result:
+        if item == '\n':
+            if current_line:
+                final_output.append("C(" + ".".join(current_line) + ")")
+                current_line = []
+            final_output.append("\n")
+        else:
+            current_line.append(item)
+    if current_line:
+        final_output.append("C(" + ".".join(current_line) + ")")
+        
+    return "".join(final_output)
 
 def decode_brokode(text):
-    text = text.strip()
-    if not (text.startswith("C(") and text.endswith(")")):
-        return text 
-    content = text[2:-1]
-    if not content: return ""
-    parts = content.split('.')
-    decoded = []
-    for part in parts:
-        if part in CODE_TO_DIGIT:
-            decoded.append(CODE_TO_DIGIT[part])
+    lines = text.split('\n')
+    decoded_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        if not (line.startswith("C(") and line.endswith(")")):
+            decoded_lines.append(line)
             continue
-        code_part = ""
-        mod_part = ""
-        for i, char in enumerate(part):
-            if not char.isdigit():
-                code_part = part[:i]
-                mod_part = part[i:]
-                break
-        if not code_part: code_part = part
-        base_char = CODE_TO_CHAR.get(code_part, '?')
-        if mod_part:
-            mods = mod_part.split('/')
-            # Áp dụng kw/km trước
-            for mod in mods:
-                if mod in VARIANT_RULES:
-                    base_char = VARIANT_RULES[mod].get(base_char, base_char)
-            # Áp dụng dấu thanh sau
-            tone_char = ""
-            for mod in mods:
-                if mod in REVERSE_TONES.values():
-                    for u_char, u_name in TONE_MARKS.items():
-                        if u_name == mod:
-                            tone_char = u_char
-                            break
-            if tone_char:
-                base_char = unicodedata.normalize('NFC', base_char + tone_char)
-        decoded.append(base_char)
-    return "".join(decoded)
+            
+        content = line[2:-1]
+        if not content: 
+            decoded_lines.append("")
+            continue
+        
+        parts = content.split('.')
+        decoded_chars = []
+        
+        for part in parts:
+            if part in CODE_TO_DIGIT:
+                decoded_chars.append(CODE_TO_DIGIT[part])
+                continue
+                
+            code_part = ""
+            mod_part = ""
+            for i, char in enumerate(part):
+                if not char.isdigit():
+                    code_part = part[:i]
+                    mod_part = part[i:]
+                    break
+            if not code_part: code_part = part
+            
+            base_char = CODE_TO_CHAR.get(code_part, '?')
+            
+            if mod_part:
+                mods = mod_part.split('/')
+                # 1. Biến thể kw/km
+                for mod in mods:
+                    if mod in VARIANT_RULES:
+                        base_char = VARIANT_RULES[mod].get(base_char, base_char)
+                
+                # 2. Dấu thanh (ĐÃ FIX: Check trực tiếp key)
+                tone_char = ""
+                for mod in mods:
+                    if mod in REVERSE_TONES:
+                        tone_char = REVERSE_TONES[mod]
+                        break
+                
+                if tone_char:
+                    base_char = unicodedata.normalize('NFC', base_char + tone_char)
+            
+            decoded_chars.append(base_char)
+        decoded_lines.append("".join(decoded_chars))
+        
+    return "\n".join(decoded_lines)
 
 # ==========================================
-# GIAO DIỆN MOBILE
+# GIAO DIỆN MOBILE ULTIMATE (DARK MODE)
 # ==========================================
 def main(page: ft.Page):
-    page.title = "Brokode Fixed"
-    page.scroll = "adaptive"
-    page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 20
+    # Cấu hình mặc định: DARK MODE + NỀN ĐEN
+    page.title = "Brokode Ultimate"
+    page.scroll = "hidden" # Ẩn thanh cuộn để đẹp hơn
+    page.theme_mode = ft.ThemeMode.DARK
+    page.bgcolor = "black" # Màu đen hoàn toàn (AMOLED)
+    page.padding = 0 # Full màn hình
 
-    lbl_title = ft.Text("Brokode V2.1 (Fix dấu)", size=24, weight="bold")
+    # Hàm đổi giao diện Sáng/Tối
+    def toggle_theme(e):
+        if page.theme_mode == ft.ThemeMode.DARK:
+            page.theme_mode = ft.ThemeMode.LIGHT
+            page.bgcolor = "white"
+            btn_theme.icon = ft.icons.DARK_MODE
+            btn_theme.tooltip = "Chuyển sang Tối"
+        else:
+            page.theme_mode = ft.ThemeMode.DARK
+            page.bgcolor = "black"
+            btn_theme.icon = ft.icons.LIGHT_MODE
+            btn_theme.tooltip = "Chuyển sang Sáng"
+        page.update()
+
+    # Thanh tiêu đề (AppBar)
+    btn_theme = ft.IconButton(
+        icon=ft.icons.LIGHT_MODE, 
+        on_click=toggle_theme, 
+        tooltip="Chuyển giao diện"
+    )
     
-    txt_result = ft.TextField(
-        label="Kết quả",
-        multiline=True,
-        read_only=True,
-        min_lines=5,
-        text_size=16,
-        border_color="blue"
+    page.appbar = ft.AppBar(
+        title=ft.Text("Brokode V3", weight="bold", size=22),
+        center_title=True,
+        bgcolor=ft.colors.BLUE_GREY_900,
+        actions=[btn_theme]
     )
 
+    # Ô hiển thị kết quả
+    txt_result = ft.TextField(
+        label="Kết quả dịch",
+        multiline=True,
+        read_only=True,
+        min_lines=6,
+        text_size=18,
+        border_radius=15,
+        filled=True, # Có màu nền
+        bgcolor=ft.colors.with_opacity(0.1, ft.colors.WHITE), # Nền mờ nhẹ
+        border_color=ft.colors.TRANSPARENT,
+    )
+
+    # Xử lý sự kiện nhập liệu
     def on_input_change(e):
         try:
             content = e.control.value.strip()
@@ -175,33 +220,52 @@ def main(page: ft.Page):
             txt_result.value = f"Lỗi: {str(ex)}"
             page.update()
 
+    # Ô nhập liệu
     txt_input = ft.TextField(
-        label="Nhập nội dung",
-        hint_text="Thử nhập: ừ, ắ, ệ...",
+        label="Nhập văn bản",
+        hint_text="Gõ Tiếng Việt hoặc dán mã Brokode...",
         multiline=True,
-        min_lines=3,
+        min_lines=4,
+        max_lines=6,
         on_change=on_input_change,
-        text_size=16
+        text_size=16,
+        border_radius=15,
+        border_color=ft.colors.BLUE_400,
+        focused_border_color=ft.colors.BLUE_200,
     )
 
+    # Nút Copy
     def copy_result(e):
         page.set_clipboard(txt_result.value)
-        page.show_snack_bar(ft.SnackBar(ft.Text("Đã copy!")))
+        page.show_snack_bar(ft.SnackBar(ft.Text("Đã copy vào bộ nhớ tạm!"), bgcolor="green"))
 
-    btn_copy = ft.ElevatedButton("Copy Kết quả", on_click=copy_result)
-
-    page.add(
-        ft.Column(
-            [
-                lbl_title,
-                txt_input,
-                ft.Divider(),
-                txt_result,
-                btn_copy
-            ],
-            spacing=20,
-            alignment=ft.MainAxisAlignment.START
+    btn_copy = ft.ElevatedButton(
+        "Sao chép kết quả", 
+        icon=ft.icons.COPY, 
+        on_click=copy_result,
+        height=50,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=12),
+            bgcolor=ft.colors.BLUE_700,
+            color="white"
         )
     )
+
+    # Bố cục chính (Container bọc ngoài để tạo khoảng cách đẹp)
+    content_container = ft.Container(
+        padding=20,
+        content=ft.Column(
+            [
+                txt_input,
+                ft.Divider(height=20, color="transparent"),
+                txt_result,
+                ft.Divider(height=20, color="transparent"),
+                ft.Container(content=btn_copy, alignment=ft.alignment.center)
+            ],
+            scroll="adaptive"
+        )
+    )
+
+    page.add(content_container)
 
 ft.app(target=main)
