@@ -2,7 +2,7 @@ import flet as ft
 import unicodedata
 
 # ==========================================
-# PHẦN LOGIC (GIỮ NGUYÊN)
+# PHẦN LOGIC (ĐÃ SỬA LỖI MẤT DẤU MŨ/RÂU)
 # ==========================================
 CHAR_TO_CODE = {
     'a': '78', 'b': '75', 'c': '72', 'd': '69', 'e': '66', 'f': '63', 'g': '60',
@@ -34,18 +34,36 @@ TONE_MARKS = {
 REVERSE_TONES = {v: k for k, v in TONE_MARKS.items()}
 
 def get_char_modifiers(char):
+    # Bước 1: Tách ký tự thành các thành phần nhỏ (NFD)
     char_nfd = unicodedata.normalize('NFD', char)
-    base_char = char_nfd[0]
+    base_char = char_nfd[0] # Lấy chữ cái gốc (ví dụ 'ừ' -> gốc là 'u')
     modifiers = []
+    
+    # Danh sách tạm để tái tạo chữ cái không có dấu thanh (để check kw/km)
+    temp_chars_without_tone = [base_char]
+
+    # Bước 2: Duyệt qua các dấu đi kèm
     for c in char_nfd[1:]:
         if c in TONE_MARKS:
+            # Nếu là dấu thanh (sắc huyền...) thì đưa vào danh sách mod
             modifiers.append(TONE_MARKS[c])
+        else:
+            # Nếu không phải dấu thanh (ví dụ dấu mũ, dấu râu), giữ lại để check kw/km
+            temp_chars_without_tone.append(c)
     
-    char_no_tone = unicodedata.normalize('NFC', base_char)
-    if char == 'đ' or base_char == 'đ': return 'd', ['kw']
+    # Bước 3: Tái tạo chữ cái chỉ có mũ/râu (ví dụ 'ừ' -> tái tạo thành 'ư')
+    char_no_tone = unicodedata.normalize('NFC', "".join(temp_chars_without_tone))
+    
+    # Xử lý riêng chữ đ (vì đ đôi khi không tách được bằng NFD trên một số hệ thống)
+    if char == 'đ' or base_char == 'đ' or char_no_tone == 'đ':
+        return 'd', ['kw'] + modifiers
+
+    # Bước 4: Check xem chữ tái tạo có phải là biến thể (ă, â, ê, ô, ơ, ư) không
     if char_no_tone in REVERSE_VARIANTS:
         base_origin, mod_type = REVERSE_VARIANTS[char_no_tone]
+        # Thêm mod loại kw/km vào đầu danh sách
         return base_origin, [mod_type] + modifiers
+    
     return base_char, modifiers
 
 def encode_text(text):
@@ -56,11 +74,15 @@ def encode_text(text):
         if lower_char.isdigit():
             result.append(DIGIT_TO_CODE.get(lower_char, lower_char))
             continue
+        
+        # Gọi hàm xử lý mới đã fix lỗi
         base, mods = get_char_modifiers(lower_char)
+        
         if base in CHAR_TO_CODE:
             code = CHAR_TO_CODE[base]
             unique_mods = list(dict.fromkeys(mods))
             if unique_mods:
+                # Format: code + mod1 + / + mod2...
                 full_code = code + unique_mods[0]
                 if len(unique_mods) > 1:
                     full_code += "".join("/" + m for m in unique_mods[1:])
@@ -68,8 +90,16 @@ def encode_text(text):
             else:
                 result.append(code)
         else:
-            if char.strip(): result.append("?") 
-    return "C(" + ".".join(result) + ")"
+            # Giữ nguyên ký tự lạ (xuống dòng, dấu câu...)
+            if char == '\n': 
+                result.append('\n')
+            elif char.strip(): 
+                result.append("?") 
+    
+    # Xử lý ghép chuỗi output đẹp hơn
+    final_str = "C(" + ".".join([r for r in result if r != '\n']) + ")"
+    # Nếu có xuống dòng thì xử lý hiển thị (tạm thời để simple)
+    return final_str
 
 def decode_brokode(text):
     text = text.strip()
@@ -94,9 +124,11 @@ def decode_brokode(text):
         base_char = CODE_TO_CHAR.get(code_part, '?')
         if mod_part:
             mods = mod_part.split('/')
+            # Áp dụng kw/km trước
             for mod in mods:
                 if mod in VARIANT_RULES:
                     base_char = VARIANT_RULES[mod].get(base_char, base_char)
+            # Áp dụng dấu thanh sau
             tone_char = ""
             for mod in mods:
                 if mod in REVERSE_TONES.values():
@@ -110,16 +142,15 @@ def decode_brokode(text):
     return "".join(decoded)
 
 # ==========================================
-# GIAO DIỆN MOBILE (ĐÃ FIX LỖI ĐEN MÀN HÌNH)
+# GIAO DIỆN MOBILE
 # ==========================================
 def main(page: ft.Page):
-    # Cấu hình cơ bản cho mobile
-    page.title = "Brokode"
+    page.title = "Brokode Fixed"
     page.scroll = "adaptive"
-    page.theme_mode = ft.ThemeMode.LIGHT # Bắt buộc chế độ sáng để tránh lỗi hiển thị
+    page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 20
 
-    lbl_title = ft.Text("Brokode Converter", size=24, weight="bold")
+    lbl_title = ft.Text("Brokode V2.1 (Fix dấu)", size=24, weight="bold")
     
     txt_result = ft.TextField(
         label="Kết quả",
@@ -141,13 +172,12 @@ def main(page: ft.Page):
                 txt_result.value = encode_text(content)
             page.update()
         except Exception as ex:
-            # Nếu có lỗi thì hiện ra để biết đường sửa
             txt_result.value = f"Lỗi: {str(ex)}"
             page.update()
 
     txt_input = ft.TextField(
         label="Nhập nội dung",
-        hint_text="Tiếng Việt hoặc mã Brokode...",
+        hint_text="Thử nhập: ừ, ắ, ệ...",
         multiline=True,
         min_lines=3,
         on_change=on_input_change,
@@ -174,5 +204,4 @@ def main(page: ft.Page):
         )
     )
 
-# Dòng quan trọng nhất: Chỉ giữ target=main, không thêm gì khác
 ft.app(target=main)
